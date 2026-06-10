@@ -60,6 +60,20 @@
           }
         }
       }
+    },
+    "/api/protected": {
+      "get": {
+        "summary": "Rota Protegida por Token",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Sucesso"
+          },
+          "401": {
+            "description": "Não autorizado"
+          }
+        }
+      }
     }
   }
 }

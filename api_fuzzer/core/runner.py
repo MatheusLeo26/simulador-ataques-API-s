@@ -8,10 +8,12 @@ from api_fuzzer.modules.idor import IDORModule
 from api_fuzzer.modules.logic_breaking import LogicBreakingModule
 
 class AttackSimulatorRunner:
-    def __init__(self, target_url: str, endpoints: List[Endpoint], extra_headers: Optional[Dict[str, str]] = None):
+    def __init__(self, target_url: str, endpoints: List[Endpoint], extra_headers: Optional[Dict[str, str]] = None, auth_token: Optional[str] = None, auth_cookies: Optional[list] = None):
         self.target_url = target_url
         self.endpoints = endpoints
         self.extra_headers = extra_headers or {}
+        self.auth_token = auth_token
+        self.auth_cookies = auth_cookies
         # Load active modules
         self.modules: List[BaseSecurityModule] = [
             RateLimitModule(),
@@ -23,7 +25,7 @@ class AttackSimulatorRunner:
         """Orchestrates test executions across all registered vulnerability modules."""
         all_findings = []
         
-        async with PlaywrightClient(base_url=self.target_url, extra_headers=self.extra_headers) as client:
+        async with PlaywrightClient(base_url=self.target_url, extra_headers=self.extra_headers, auth_token=self.auth_token, auth_cookies=self.auth_cookies) as client:
             for module in self.modules:
                 print(f"[+] Iniciando módulo: {module.name}...")
                 try:

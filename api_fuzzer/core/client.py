@@ -3,9 +3,12 @@ from typing import Any, Dict, Optional, Tuple
 from playwright.async_api import async_playwright, APIRequestContext
 
 class PlaywrightClient:
-    def __init__(self, base_url: Optional[str] = None, extra_headers: Optional[Dict[str, str]] = None):
+    def __init__(self, base_url: Optional[str] = None, extra_headers: Optional[Dict[str, str]] = None, auth_token: Optional[str] = None, auth_cookies: Optional[list] = None):
         self.base_url = base_url
         self.extra_headers = extra_headers or {}
+        if auth_token:
+            self.extra_headers["Authorization"] = f"Bearer {auth_token}"
+        self.auth_cookies = auth_cookies
         self._playwright = None
         self._request_context: Optional[APIRequestContext] = None
 
@@ -15,6 +18,19 @@ class PlaywrightClient:
             base_url=self.base_url,
             extra_http_headers=self.extra_headers
         )
+        # Apply cookies if provided
+        if self.auth_cookies:
+            # Not supported natively without a browser context for storage state,
+            # but we can format cookies into the Cookie header or set them in the context
+            # Let's map the cookies to the domain or format as header
+            cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in self.auth_cookies])
+            self.extra_headers["Cookie"] = cookie_str
+            # Reload context with updated headers
+            await self._request_context.dispose()
+            self._request_context = await self._playwright.request.new_context(
+                base_url=self.base_url,
+                extra_http_headers=self.extra_headers
+            )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

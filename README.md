@@ -52,15 +52,27 @@ api_fuzzer/
    playwright install chromium
    ```
 
-### Executando a Varredura
+### Executando a Varredura (Modo Padrão)
 Para testar a ferramenta contra uma documentação local e uma API alvo:
 ```bash
 python api_fuzzer/main.py --spec mock_openapi.json --target http://localhost:8000
 ```
 
-*Nota: Você também pode usar múltiplos cabeçalhos adicionais de autenticação, ex:*
+*Nota: Você também pode usar múltiplos cabeçalhos adicionais de autenticação manual, ex:*
 ```bash
 python api_fuzzer/main.py --spec mock_openapi.json --target http://localhost:8000 --header "Authorization: Bearer <SEU_TOKEN>"
+```
+
+### 🔒 Autenticação Dinâmica Automatizada (Playwright)
+Se a sua API exige login e os tokens expiram rapidamente, o fuzzer pode simular um navegador e fazer o login por você! Ele intercepta a rede e embute o token/cookie capturado nas requisições:
+```bash
+python api_fuzzer/main.py \
+  --spec mock_openapi.json \
+  --target http://localhost:8000 \
+  --auth-url http://localhost:8000/login \
+  --auth-user seu_usuario \
+  --auth-pass sua_senha \
+  --auth-type bearer
 ```
 
 ---

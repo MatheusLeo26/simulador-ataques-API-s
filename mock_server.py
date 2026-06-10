@@ -16,6 +16,38 @@ class MockVulnerableAPI(BaseHTTPRequestHandler):
         path = parsed_url.path
         query = urllib.parse.parse_qs(parsed_url.query)
 
+        # Rota protegida por autenticação dinâmica
+        if path == "/api/protected":
+            auth_header = self.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer MOCK_VALID_TOKEN"):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"secret_data": "Este é um dado super secreto protegido por autenticação."}).encode())
+            else:
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Unauthorized. Bearer token ausente ou inválido."}).encode())
+            return
+
+        # UI de Login (HTML) para o Playwright preencher
+        if path == "/login":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            html = """
+            <html><body>
+                <form method="POST" action="/api/login">
+                    <input type="text" name="username" placeholder="Usuário" id="username">
+                    <input type="password" name="password" placeholder="Senha" id="password">
+                    <button type="submit">Entrar</button>
+                </form>
+            </body></html>
+            """
+            self.wfile.write(html.encode())
+            return
+
         # Simulating IDOR & Logic Breaking Fuzzing on /api/users/{id}
         if path.startswith("/api/users/"):
             user_id = path.split("/")[-1]
@@ -58,12 +90,13 @@ class MockVulnerableAPI(BaseHTTPRequestHandler):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
 
-        # Simulating Lack of Rate Limiting on login
+        # Simulating Authentication endpoint returning a token
         if path == "/api/login":
+            # For simplicity, we just return a valid token unconditionally
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            response = {"status": "success", "message": "Logado com sucesso!"}
+            response = {"status": "success", "message": "Logado com sucesso!", "access_token": "MOCK_VALID_TOKEN_123"}
             self.wfile.write(json.dumps(response).encode())
             return
 

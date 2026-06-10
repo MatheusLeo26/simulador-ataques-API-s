@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from api_fuzzer.core.parser import OpenAPIParser
 from api_fuzzer.core.runner import AttackSimulatorRunner
 from api_fuzzer.core.reporter import VulnerabilityReporter
+from api_fuzzer.core.auth import DynamicAuthenticator
 
 def parse_headers(header_list: list) -> Dict[str, str]:
     """Parses key-value headers from input CLI list."""
@@ -51,6 +52,24 @@ async def async_main():
         action="append",
         help="Cabeçalhos HTTP adicionais para enviar (ex: 'Authorization: Bearer <TOKEN>'). Pode ser repetido."
     )
+    parser.add_argument(
+        "--auth-url",
+        help="URL de login para autenticação dinâmica (ex: http://localhost:8000/login)"
+    )
+    parser.add_argument(
+        "--auth-user",
+        help="Usuário para preencher na autenticação dinâmica"
+    )
+    parser.add_argument(
+        "--auth-pass",
+        help="Senha para preencher na autenticação dinâmica"
+    )
+    parser.add_argument(
+        "--auth-type",
+        default="bearer",
+        choices=["bearer", "cookie"],
+        help="Tipo de extração após login dinâmico: 'bearer' (token JSON/localStorage) ou 'cookie' (sessão do browser)."
+    )
 
     args = parser.parse_args()
 
@@ -70,6 +89,13 @@ async def async_main():
         sys.exit(1)
 
     headers = parse_headers(args.header)
+    auth_token = None
+    auth_cookies = None
+
+    if args.auth_url and args.auth_user and args.auth_pass:
+        print("[+] Modo de Autenticação Dinâmica ativado!")
+        authenticator = DynamicAuthenticator(args.auth_url, args.auth_user, args.auth_pass, args.auth_type)
+        auth_token, auth_cookies = await authenticator.execute_login()
 
     print(f"[+] Target definido: {args.target}")
     print(f"[+] Iniciando simulações de ataque...")
@@ -77,7 +103,9 @@ async def async_main():
     runner = AttackSimulatorRunner(
         target_url=args.target,
         endpoints=endpoints,
-        extra_headers=headers
+        extra_headers=headers,
+        auth_token=auth_token,
+        auth_cookies=auth_cookies
     )
     
     findings = await runner.run_all()
