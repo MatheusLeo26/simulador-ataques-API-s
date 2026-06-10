@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+report.html
+report.json
+.system_generated/
+.idea/
+.vscode/
