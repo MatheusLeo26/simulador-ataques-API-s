@@ -1,19 +1,18 @@
 import asyncio
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from api_fuzzer.core.parser import Endpoint
 from api_fuzzer.core.client import PlaywrightClient
 from api_fuzzer.modules.base import BaseSecurityModule
-from api_fuzzer.utils.payloads import LOGIC_BREAKING_PAYLOADS
-from api_fuzzer.utils.mutator import generate_default_body, mutate_payload
+from api_fuzzer.utils.mutator import generate_default_body, mutate_payload_smart, get_smart_payloads
 
 class LogicBreakingModule(BaseSecurityModule):
     @property
     def name(self) -> str:
-        return "Logic & Input Validation Fuzzing"
+        return "Smart Logic & Type-Based Fuzzing"
 
     @property
     def description(self) -> str:
-        return "Injeta payloads malformados ou de quebra de lógica nos parâmetros e no corpo JSON para induzir erros de servidor (HTTP 500) ou vazamento de dados."
+        return "Injeta payloads inteligentes baseados no tipo do dado esperado (integer, string, boolean) no corpo JSON e nos parâmetros, buscando erros HTTP 500 ou vazamentos de banco de dados."
 
     async def _check_vulnerability(self, status: int, text: str, endpoint: Endpoint, param_name: str, payload: Any) -> Optional[Dict[str, Any]]:
         db_errors = ["sql syntax", "mysql_fetch", "sqlite3", "postgresql", "unhandled exception", "stack trace"]
@@ -33,10 +32,10 @@ class LogicBreakingModule(BaseSecurityModule):
                 "description": f"{desc_detail} ao injetar na propriedade '{param_name}'.",
                 "details": {
                     "parameter": param_name,
-                    "payload_used": str(payload),
+                    "payload_used": str(payload)[:100] + ("..." if len(str(payload)) > 100 else ""),
                     "response_status": status,
                     "response_snippet": text[:250],
-                    "recommendation": "Implementar validação estrita do tipo e sanitização do input (input validation) no backend. Nunca expor stack traces ou erros brutos do banco de dados na resposta."
+                    "recommendation": "Implementar validação estrita de tipo, limite de tamanho e sanitização (input validation) no backend. Nunca expor erros brutos."
                 }
             }
         return None
@@ -49,16 +48,23 @@ class LogicBreakingModule(BaseSecurityModule):
         findings = []
 
         for endpoint in endpoints:
-            # Handle path values safely
             url_path = endpoint.path
             for p in endpoint.parameters:
                 if p.in_ == "path":
                     url_path = url_path.replace(f"{{{p.name}}}", str(p.default or "1"))
 
-            # 1. Test Fuzzing on Query Parameters
+            # 1. Smart Fuzzing on Query Parameters
             query_params = [p for p in endpoint.parameters if p.in_ == "query"]
             for param in query_params:
-                for payload in LOGIC_BREAKING_PAYLOADS:
+                param_type = "string" # Default
+                # Assuming param schema extraction could be improved in parser, but we fallback to string
+                # If param objects have 'schema', we could extract it:
+                if hasattr(param, "schema") and isinstance(param.schema, dict):
+                    param_type = param.schema.get("type", "string")
+
+                smart_payloads = get_smart_payloads(param_type)
+                
+                for payload in smart_payloads:
                     test_params = {}
                     for p in endpoint.parameters:
                         if p.in_ == "query":
@@ -75,10 +81,10 @@ class LogicBreakingModule(BaseSecurityModule):
                         findings.append(finding)
                         break
 
-            # 2. Test Fuzzing on JSON Body
+            # 2. Smart Fuzzing on JSON Body
             if endpoint.body_schema:
                 base_body = generate_default_body(endpoint.body_schema)
-                for mutated_path, payload, mutated_body in mutate_payload(base_body, LOGIC_BREAKING_PAYLOADS):
+                for mutated_path, payload, mutated_body in mutate_payload_smart(endpoint.body_schema, base_body):
                     status, headers, text = await client.send_request(
                         method=endpoint.method,
                         url=url_path,

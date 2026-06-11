@@ -30,19 +30,39 @@ def generate_default_body(schema: Dict[str, Any]) -> Dict[str, Any]:
 
     return payload
 
-def mutate_payload(base_payload: Dict[str, Any], payloads: list) -> Iterator[Tuple[str, Any, Dict[str, Any]]]:
+def get_smart_payloads(prop_type: str) -> list:
+    """Returns malicious payloads specifically targeted at a given data type."""
+    from api_fuzzer.utils.payloads import LOGIC_BREAKING_PAYLOADS
+    
+    if prop_type in ["integer", "number"]:
+        return [-999999999999999999, 999999999999999999, 0, -1, "NaN", "1.0000000000000001", "NOT_A_NUM", None, []]
+    elif prop_type == "boolean":
+        return ["true", "false", 2, -1, "random_string", None, []]
+    elif prop_type == "string":
+        # Combines generic logic breakers with extremely large strings for overflow
+        return LOGIC_BREAKING_PAYLOADS + ["A" * 5000, ""]
+    elif prop_type == "array":
+        return ["not_an_array", {}, None]
+    
+    return LOGIC_BREAKING_PAYLOADS
+
+def mutate_payload_smart(schema: Dict[str, Any], base_payload: Dict[str, Any]) -> Iterator[Tuple[str, Any, Dict[str, Any]]]:
     """
-    Recursively iterates through the dictionary and yields permutations where
-    exactly one field is replaced by a malicious payload.
-    Yields: (mutated_field_path, payload_used, mutated_json_dict)
+    Recursively iterates through the schema and base payload, yielding permutations 
+    where exactly one field is replaced by a type-specific malicious payload.
     """
-    def _mutate_recursive(current_obj, path):
+    def _mutate_recursive(current_schema: Dict[str, Any], current_obj: Any, path: str):
+        properties = current_schema.get("properties", {})
+        
         if isinstance(current_obj, dict):
             for key, value in current_obj.items():
                 current_path = f"{path}.{key}" if path else key
+                prop_details = properties.get(key, {})
+                prop_type = prop_details.get("type", "string")
                 
-                # If value is primitive, yield mutations for it
+                # If value is primitive, yield mutations for it based on its type
                 if not isinstance(value, (dict, list)):
+                    payloads = get_smart_payloads(prop_type)
                     for pl in payloads:
                         mutated_copy = copy.deepcopy(base_payload)
                         # Navigate the deepcopy and inject the payload
@@ -53,19 +73,27 @@ def mutate_payload(base_payload: Dict[str, Any], payloads: list) -> Iterator[Tup
                         target[key] = pl
                         yield current_path, pl, mutated_copy
                 
-                # Recurse deeper
-                yield from _mutate_recursive(value, current_path)
+                # Recurse deeper if object
+                if prop_type == "object" and isinstance(value, dict):
+                    yield from _mutate_recursive(prop_details, value, current_path)
                 
-        elif isinstance(current_obj, list):
-            for i, item in enumerate(current_obj):
-                current_path = f"{path}[{i}]"
-                if not isinstance(item, (dict, list)):
-                    for pl in payloads:
-                        mutated_copy = copy.deepcopy(base_payload)
-                        # This simple nav doesn't handle array paths fully out of the box, 
-                        # but for standard JSON fuzzing it's enough to mutate the dict keys.
-                        # For robustness, we could use a proper JSONPath library, but let's keep it simple.
-                        pass
-                yield from _mutate_recursive(item, current_path)
+                # Handle Array items
+                elif prop_type == "array" and isinstance(value, list):
+                    items_schema = prop_details.get("items", {})
+                    for i, item in enumerate(value):
+                        item_path = f"{current_path}[{i}]"
+                        if isinstance(item, dict):
+                            yield from _mutate_recursive(items_schema, item, item_path)
+                        else:
+                            # Primitive array element mutation
+                            payloads = get_smart_payloads(items_schema.get("type", "string"))
+                            for pl in payloads:
+                                mutated_copy = copy.deepcopy(base_payload)
+                                target = mutated_copy
+                                if path:
+                                    for p in path.split("."):
+                                        target = target[p]
+                                target[key][i] = pl
+                                yield item_path, pl, mutated_copy
 
-    yield from _mutate_recursive(base_payload, "")
+    yield from _mutate_recursive(schema, base_payload, "")
