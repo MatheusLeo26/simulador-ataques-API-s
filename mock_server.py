@@ -92,6 +92,21 @@ class MockVulnerableAPI(BaseHTTPRequestHandler):
 
         # Simulating Authentication endpoint returning a token
         if path == "/api/login":
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length > 0:
+                body_data = self.rfile.read(content_length).decode('utf-8')
+                try:
+                    body_json = json.loads(body_data)
+                    # Vulnerability: Crash Se contiver aspa simples no username (simula falha de escape JSON/SQL)
+                    if "'" in body_json.get("username", ""):
+                        self.send_response(500)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": "Internal Server Error", "trace": "SQL syntax error near '''"}).encode())
+                        return
+                except Exception:
+                    pass
+
             # For simplicity, we just return a valid token unconditionally
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

@@ -12,6 +12,7 @@ Um simulador de ataques e fuzzer automatizado de APIs robusto e modular escrito 
   - **Falta de Rate Limiting**: Dispara rajadas concorrentes de requisições buscando verificar se o servidor bloqueia requisições abusivas com o status `429 Too Many Requests`.
   - **IDOR (Insecure Direct Object Reference)**: Identifica parâmetros dinâmicos de rota (como IDs ou UUIDs) e adultera seus valores para verificar se o servidor expõe dados restritos sem validação apropriada (HTTP 200).
   - **Logic & Input Breaking Fuzzing**: Injeta payloads clássicos de escape (aspas, SQLi, injeção de comandos, recursividade) e monitora a ocorrência de erros internos não tratados (HTTP 500) ou vazamentos brutos de stack traces.
+  - **Mutador Dinâmico de Body JSON**: Reconhece esquemas de body esperados nas rotas POST/PUT e injeta cirurgicamente os payloads de ataque, chave-a-chave, de forma recursiva em estruturas profundas.
 - **Relatório Premium Interativo**: Geração de relatórios completos em formato estruturado (JSON) e formato visual premium em HTML, contendo dados detalhados das falhas e orientações de remediação.
 
 ---
