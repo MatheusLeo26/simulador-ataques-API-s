@@ -523,8 +523,13 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="openapi-url">URL da Especificação OpenAPI (Opcional)</label>
+                    <input type="text" id="openapi-url" placeholder="https://api.exemplo.com/openapi.json">
+                </div>
+
+                <div class="form-group">
                     <label for="openapi-spec">Especificação OpenAPI (JSON)</label>
-                    <textarea id="openapi-spec" placeholder='Cole o conteúdo do seu OpenAPI JSON aqui...'></textarea>
+                    <textarea id="openapi-spec" placeholder='Cole o conteúdo do seu OpenAPI JSON aqui (se não usar URL)...'></textarea>
                 </div>
 
                 <button type="submit" class="btn" id="btn-start">
@@ -866,9 +871,23 @@
             logToTerminal('[*] Iniciando conexão com o fuzzer...', 'info');
 
             // Gather inputs
+            let specJson = null;
+            const specText = document.getElementById('openapi-spec').value.trim();
+            if (specText) {
+                try {
+                    specJson = JSON.parse(specText);
+                } catch(e) {
+                    logToTerminal('[-] JSON da especificação OpenAPI inválido.', 'error');
+                    btn.disabled = false;
+                    statusIndicator.textContent = "Erro";
+                    return;
+                }
+            }
+
             const payload = {
                 target_url: document.getElementById('target-url').value,
-                openapi_spec: JSON.parse(document.getElementById('openapi-spec').value),
+                openapi_url: document.getElementById('openapi-url').value,
+                openapi_spec: specJson,
                 auth_type: document.getElementById('auth-type').value,
                 auth_url: document.getElementById('auth-url').value,
                 auth_user: document.getElementById('auth-user').value,

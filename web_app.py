@@ -21,7 +21,8 @@ scans: Dict[str, Dict[str, Any]] = {}
 
 class ScanConfig(BaseModel):
     target_url: str
-    openapi_spec: Dict[str, Any]
+    openapi_spec: Optional[Dict[str, Any]] = None
+    openapi_url: Optional[str] = None
     auth_type: str
     auth_url: Optional[str] = None
     auth_user: Optional[str] = None
@@ -53,7 +54,24 @@ async def run_scan_task(scan_id: str, config: ScanConfig, queue: asyncio.Queue, 
             {"type": "log", "message": "[+] Carregando especificação OpenAPI...", "level": "success"}
         )
         
-        spec_parser = OpenAPIParser(config.openapi_spec)
+        openapi_data = config.openapi_spec
+        if config.openapi_url:
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                {"type": "log", "message": f"[*] Baixando especificação OpenAPI de: {config.openapi_url}", "level": "info"}
+            )
+            import urllib.request
+            try:
+                req = urllib.request.Request(config.openapi_url, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req) as response:
+                    openapi_data = json.loads(response.read().decode())
+            except Exception as e:
+                raise Exception(f"Falha ao carregar OpenAPI da URL: {e}")
+                
+        if not openapi_data:
+            raise Exception("Nenhuma especificação OpenAPI fornecida (via arquivo ou URL).")
+        
+        spec_parser = OpenAPIParser(openapi_data)
         endpoints = spec_parser.get_endpoints()
         
         loop.call_soon_threadsafe(

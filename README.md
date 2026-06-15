@@ -81,6 +81,8 @@ python api_fuzzer/main.py \
 ### 🖥️ Painel de Controle Web Interativo (Dashboard)
 Agora você pode gerenciar as varreduras, visualizar logs em tempo real e analisar relatórios gráficos interativos a partir do navegador sem utilizar a linha de comando!
 
+- **NOVIDADE:** Importe especificações OpenAPI diretamente de uma URL no Dashboard, sem precisar baixar o arquivo JSON manualmente!
+
 Para iniciar o Painel de Controle Web:
 ```bash
 python web_app.py
