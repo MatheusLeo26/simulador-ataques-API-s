@@ -78,6 +78,17 @@ python api_fuzzer/main.py \
 
 ---
 
+### 🖥️ Painel de Controle Web Interativo (Dashboard)
+Agora você pode gerenciar as varreduras, visualizar logs em tempo real e analisar relatórios gráficos interativos a partir do navegador sem utilizar a linha de comando!
+
+Para iniciar o Painel de Controle Web:
+```bash
+python web_app.py
+```
+Acesse no seu navegador: **`http://localhost:8080`**
+
+---
+
 ## 📊 Relatórios de Saída
 - **`report.json`**: Formato ideal para consumo em pipelines de CI/CD ou integração com outras ferramentas de segurança.
 - **`report.html`**: Painel moderno em dark mode com estatísticas interativas dos problemas de segurança descobertos e as recomendações de mitigação.
