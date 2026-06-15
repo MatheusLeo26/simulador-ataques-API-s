@@ -743,7 +743,12 @@
             
             const counts = { critical: 0, high: 0, medium: 0, low: 0 };
             findings.forEach(f => {
-                const sev = (f.severity || 'low').toLowerCase();
+                let sev = (f.severity || 'low').toLowerCase();
+                if (sev === 'crítico' || sev === 'critico') sev = 'critical';
+                if (sev === 'alto') sev = 'high';
+                if (sev === 'médio' || sev === 'medio') sev = 'medium';
+                if (sev === 'baixo') sev = 'low';
+                
                 if (counts[sev] !== undefined) counts[sev]++;
             });
 
@@ -794,11 +799,20 @@
 
             findings.forEach((finding, index) => {
                 const tr = document.createElement('tr');
+                let severityLower = (finding.severity || 'baixo').toLowerCase();
+                if (severityLower === 'crítico' || severityLower === 'critico') severityLower = 'critical';
+                if (severityLower === 'alto') severityLower = 'high';
+                if (severityLower === 'médio' || severityLower === 'medio') severityLower = 'medium';
+                if (severityLower === 'baixo') severityLower = 'low';
+
+                const typeOfFailure = finding.module || finding.title || 'Desconhecido';
+                const parameter = (finding.details && finding.details.parameter) || 'N/A';
+
                 tr.innerHTML = `
-                    <td><span class="badge ${finding.severity.toLowerCase()}">${finding.severity}</span></td>
+                    <td><span class="badge ${severityLower}">${finding.severity}</span></td>
                     <td><code style="font-family:'JetBrains Mono'; color:var(--accent-cyan)">${finding.endpoint}</code></td>
-                    <td>${finding.title}</td>
-                    <td><code style="font-family:'JetBrains Mono'">${finding.parameter || 'N/A'}</code></td>
+                    <td>${typeOfFailure}</td>
+                    <td><code style="font-family:'JetBrains Mono'">${parameter}</code></td>
                 `;
                 tr.addEventListener('click', () => showDetails(finding));
                 tbody.appendChild(tr);
@@ -806,13 +820,15 @@
         }
 
         function showDetails(finding) {
-            document.getElementById('modal-title').textContent = finding.title;
+            document.getElementById('modal-title').textContent = finding.module || finding.title || 'Detalhe';
             document.getElementById('modal-description').textContent = finding.description;
-            document.getElementById('modal-endpoint').textContent = `${finding.method || 'GET'} ${finding.endpoint}`;
-            document.getElementById('modal-type').textContent = finding.type;
-            document.getElementById('modal-param').textContent = finding.parameter || 'N/A';
-            document.getElementById('modal-poc').textContent = finding.proof_of_concept || 'Não disponível.';
-            document.getElementById('modal-remediation').textContent = finding.remediation || 'Aplicar validação rigorosa de inputs.';
+            document.getElementById('modal-endpoint').textContent = finding.endpoint;
+            document.getElementById('modal-type').textContent = finding.module || 'Desconhecido';
+            document.getElementById('modal-param').textContent = (finding.details && finding.details.parameter) || 'N/A';
+            
+            const rawPoc = finding.details && (finding.details.response_snippet || finding.details.payload_used || finding.details.tampered_value);
+            document.getElementById('modal-poc').textContent = rawPoc || 'Não disponível.';
+            document.getElementById('modal-remediation').textContent = (finding.details && finding.details.recommendation) || 'Aplicar validação rigorosa de inputs.';
 
             document.getElementById('vuln-modal').style.display = 'flex';
         }
