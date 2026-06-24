@@ -14,7 +14,45 @@ from pydantic import BaseModel
 # Ensure path is set
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="API Security Fuzzer Dashboard")
+
+# Configuração restrita de CORS para evitar conexões maliciosas externas
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8080", "http://127.0.0.1:8080"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
+
+# Middleware de segurança global (Headers de Segurança, CSP e Bloqueio de Source Maps/Arquivos de Origem)
+@app.middleware("http")
+async def apply_security_policies(request: Request, call_next):
+    path = request.url.path.lower()
+    # Proteção de Source Maps e códigos fonte de frontend (caso compilados/gerados)
+    if any(path.endswith(ext) for ext in [".map", ".ts", ".tsx", ".jsx", ".vue", ".svelte"]):
+        raise HTTPException(status_code=403, detail="Acesso restrito a arquivos de código fonte e source maps")
+
+    response = await call_next(request)
+    
+    # Cabeçalho CSP (Content Security Policy) robusto
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
+        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "connect-src 'self' http://localhost:8080 http://127.0.0.1:8080; "
+        "img-src 'self' data:; "
+        "frame-ancestors 'none'; "
+        "object-src 'none';"
+    )
+    # Proteção de tipos mime e frames
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # Global storage for scan states
 scans: Dict[str, Dict[str, Any]] = {}
