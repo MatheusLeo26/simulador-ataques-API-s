@@ -98,10 +98,17 @@ Acesse no seu navegador: **`http://localhost:8080`**
 ---
 
 ## 🔒 Hardening de Segurança (Dashboard Web)
+
 Para garantir que a aplicação esteja preparada para ambientes de produção e prevenir vazamento de dados ou acessos indevidos, foram aplicadas as seguintes medidas de segurança:
+
+- **Autenticação Robusta via JWT (JSON Web Tokens)**: Acesso ao Dashboard Web protegido por login. O token JWT é armazenado em um cookie seguro com as diretivas `HttpOnly` (impossibilitando o acesso via scripts de terceiros/XSS), `Secure` (exclusivo para HTTPS) e `SameSite=Strict` (proteção contra CSRF).
+- **Automações via API Keys**: Endpoint e CLI preparados para automações utilizando o cabeçalho `X-API-Key`, permitindo a integração segura do fuzzer em pipelines de CI/CD ou scripts externos sem a necessidade de fluxo interativo de login.
+- **Mecanismo de Bloqueio Imediato (Kill Switch)**: Integração com a variável de ambiente `SISTEMA_BLOQUEADO`. Quando configurada como `true`, todas as rotas e funcionalidades do servidor são bloqueadas imediatamente por um middleware, blindando o sistema contra acessos externos instantaneamente em cenários de emergência.
+- **Prevenção Ativa de XSS no Frontend**: Substituição de renderizações vulneráveis baseadas em `innerHTML` por métodos de DOM seguros (`textContent`, `createElement` e `appendChild`), assegurando que payloads e resultados de varreduras potencialmente perigosos sejam tratados estritamente como texto inofensivo.
+- **Registros e Logs Seguros**: Implementação de logs estruturados e higienizados no backend, evitando o vazamento de tokens, senhas ou informações sensíveis de sessões nos arquivos de log.
 - **Proteção de Código-Fonte e Source Maps**: Bloqueio de requisições a arquivos `.map`, `.ts`, `.tsx`, `.jsx`, `.vue` e `.svelte` para impedir a exposição da estrutura interna do frontend.
 - **CORS Restrito**: Política de Cross-Origin compartilhada restrita apenas às origens locais seguras da aplicação para evitar conexões e requisições não autorizadas por domínios terceiros.
 - **Content Security Policy (CSP)**: Cabeçalhos HTTP robustos restringindo a execução de scripts e conexões apenas a origens mapeadas e seguras, mitigando riscos de XSS.
-- **Segurança de Sessão**: Nenhum token, credencial de login ou dado sensível é persistido no `localStorage` ou `sessionStorage` do navegador.
+- **Segurança de Sessão**: Limpeza automática de qualquer armazenamento local e garantia de que nenhum token ou dado sensível seja exposto em `localStorage` ou `sessionStorage`.
 - **Headers de Segurança Complementares**: Inclusão de `X-Content-Type-Options: nosniff` (proteção de MIME types), `X-Frame-Options: DENY` (prevenção contra Clickjacking) e `Referrer-Policy: strict-origin-when-cross-origin`.
-- **Preparações para Variáveis de Produção**: Pronto para integração com plataformas como Vercel/Render através de variáveis de ambiente do sistema (`os.environ`), eliminando qualquer segredo hardcoded no repositório.
+- **Preparações para Variáveis de Produção**: Pronto para integração com plataformas de nuvem através de variáveis de ambiente do sistema (`os.environ`), eliminando qualquer segredo hardcoded no repositório.
