@@ -94,3 +94,14 @@ Acesse no seu navegador: **`http://localhost:8080`**
 ## 📊 Relatórios de Saída
 - **`report.json`**: Formato ideal para consumo em pipelines de CI/CD ou integração com outras ferramentas de segurança.
 - **`report.html`**: Painel moderno em dark mode com estatísticas interativas dos problemas de segurança descobertos e as recomendações de mitigação.
+
+---
+
+## 🔒 Hardening de Segurança (Dashboard Web)
+Para garantir que a aplicação esteja preparada para ambientes de produção e prevenir vazamento de dados ou acessos indevidos, foram aplicadas as seguintes medidas de segurança:
+- **Proteção de Código-Fonte e Source Maps**: Bloqueio de requisições a arquivos `.map`, `.ts`, `.tsx`, `.jsx`, `.vue` e `.svelte` para impedir a exposição da estrutura interna do frontend.
+- **CORS Restrito**: Política de Cross-Origin compartilhada restrita apenas às origens locais seguras da aplicação para evitar conexões e requisições não autorizadas por domínios terceiros.
+- **Content Security Policy (CSP)**: Cabeçalhos HTTP robustos restringindo a execução de scripts e conexões apenas a origens mapeadas e seguras, mitigando riscos de XSS.
+- **Segurança de Sessão**: Nenhum token, credencial de login ou dado sensível é persistido no `localStorage` ou `sessionStorage` do navegador.
+- **Headers de Segurança Complementares**: Inclusão de `X-Content-Type-Options: nosniff` (proteção de MIME types), `X-Frame-Options: DENY` (prevenção contra Clickjacking) e `Referrer-Policy: strict-origin-when-cross-origin`.
+- **Preparações para Variáveis de Produção**: Pronto para integração com plataformas como Vercel/Render através de variáveis de ambiente do sistema (`os.environ`), eliminando qualquer segredo hardcoded no repositório.
