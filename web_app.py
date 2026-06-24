@@ -5,11 +5,15 @@ import json
 import os
 import sys
 import uuid
+import logging
+import jwt
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, Depends, Cookie, Header, Response
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from passlib.context import CryptContext
 
 # Ensure path is set
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -56,6 +60,47 @@ async def apply_security_policies(request: Request, call_next):
 
 # Global storage for scan states
 scans: Dict[str, Dict[str, Any]] = {}
+
+# Auth Configuration
+SECRET_KEY = os.environ.get("JWT_SECRET", "super-secret-key-dev")
+ALGORITHM = "HS256"
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+# bcrypt hash for "admin123" by default
+ADMIN_PASS_HASH = os.environ.get("ADMIN_PASS_HASH", "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjIQqiRQYq")
+API_KEY_SECRET = os.environ.get("API_KEY", "minha-chave-api-secreta")
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger("api_fuzzer")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+class LoginData(BaseModel):
+    username: str
+    password: str
+
+async def verify_access(
+    access_token: Optional[str] = Cookie(None),
+    x_api_key: Optional[str] = Header(None)
+):
+    # 1. Kill Switch
+    if os.environ.get("SISTEMA_BLOQUEADO", "false").lower() == "true":
+        logger.warning("Acesso negado: SISTEMA_BLOQUEADO está ativo.")
+        raise HTTPException(status_code=403, detail="Sistema bloqueado emergencialmente.")
+
+    # 2. API Key para Automações
+    if x_api_key and x_api_key == API_KEY_SECRET:
+        return "api_key_user"
+
+    # 3. JWT via HttpOnly Cookie para Interface Humana
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Não autenticado. Faça login.")
+    
+    try:
+        payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Sessão expirada. Faça login novamente.")
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Sessão inválida.")
 
 class ScanConfig(BaseModel):
     target_url: str
@@ -104,7 +149,8 @@ async def run_scan_task(scan_id: str, config: ScanConfig, queue: asyncio.Queue, 
                 with urllib.request.urlopen(req) as response:
                     openapi_data = json.loads(response.read().decode())
             except Exception as e:
-                raise Exception(f"Falha ao carregar OpenAPI da URL: {e}")
+                logger.error(f"Erro ao baixar OpenAPI da URL {config.openapi_url}: {e}", exc_info=True)
+                raise Exception("Falha ao carregar OpenAPI da URL. Verifique os logs.")
                 
         if not openapi_data:
             raise Exception("Nenhuma especificação OpenAPI fornecida (via arquivo ou URL).")
@@ -158,10 +204,10 @@ async def run_scan_task(scan_id: str, config: ScanConfig, queue: asyncio.Queue, 
                 auth_cookies=runner.auth_cookies
             ) as client:
                 for module in runner.modules:
-                    print(f"[+] Iniciando módulo: {module.name}...")
+                    logger.info(f"Iniciando módulo: {module.name}")
                     try:
                         findings = await module.run_test(client, runner.endpoints)
-                        print(f"[+] Módulo '{module.name}' finalizado com {len(findings)} vulnerabilidades encontradas.")
+                        logger.info(f"Módulo '{module.name}' finalizado com {len(findings)} vulnerabilidades.")
                         all_findings.extend(findings)
                         
                         # Stream intermediate progress stats and findings
@@ -174,7 +220,7 @@ async def run_scan_task(scan_id: str, config: ScanConfig, queue: asyncio.Queue, 
                             }
                         )
                     except Exception as e:
-                        print(f"[-] Erro ao executar módulo {module.name}: {str(e)}")
+                        logger.error(f"Erro ao executar módulo {module.name}: {str(e)}", exc_info=True)
 
         scans[scan_id] = {
             "status": "complete",
@@ -192,9 +238,10 @@ async def run_scan_task(scan_id: str, config: ScanConfig, queue: asyncio.Queue, 
         )
 
     except Exception as e:
+        logger.error(f"Erro interno no fuzzer: {str(e)}", exc_info=True)
         loop.call_soon_threadsafe(
             queue.put_nowait,
-            {"type": "error", "message": str(e)}
+            {"type": "error", "message": "Ocorreu um erro interno ao processar a varredura. Consulte os logs."}
         )
 
 @app.get("/", response_class=HTMLResponse)
@@ -205,7 +252,37 @@ async def serve_index():
     with open(index_path, "r", encoding="utf-8") as f:
         return f.read()
 
-@app.post("/api/scan/start")
+@app.post("/api/auth/login")
+async def login(data: LoginData, response: Response):
+    if data.username != ADMIN_USER or not pwd_context.verify(data.password, ADMIN_PASS_HASH):
+        logger.warning(f"Tentativa de login falha para usuário: {data.username}")
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+    
+    expires = datetime.utcnow() + timedelta(hours=4)
+    token = jwt.encode({"sub": data.username, "exp": expires}, SECRET_KEY, algorithm=ALGORITHM)
+    
+    # Secure Cookie
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=True, # Garante que só viaja em HTTPS (ou localhost no Chrome)
+        samesite="lax",
+        max_age=14400
+    )
+    logger.info(f"Usuário {data.username} logado com sucesso.")
+    return {"message": "Login efetuado com sucesso"}
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie("access_token")
+    return {"message": "Sessão encerrada"}
+
+@app.get("/api/auth/me", dependencies=[Depends(verify_access)])
+async def me():
+    return {"status": "authenticated"}
+
+@app.post("/api/scan/start", dependencies=[Depends(verify_access)])
 async def start_scan(config: ScanConfig):
     scan_id = str(uuid.uuid4())
     event_queue = asyncio.Queue()
@@ -219,7 +296,7 @@ async def start_scan(config: ScanConfig):
     }
     return {"scan_id": scan_id}
 
-@app.get("/api/scan/stream/{scan_id}")
+@app.get("/api/scan/stream/{scan_id}", dependencies=[Depends(verify_access)])
 async def stream_scan(scan_id: str):
     if scan_id not in scans:
         raise HTTPException(status_code=404, detail="Sessão de varredura não encontrada")

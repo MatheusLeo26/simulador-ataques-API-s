@@ -473,9 +473,54 @@
         .hidden {
             display: none !important;
         }
+
+        /* Login Overlay */
+        #login-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-color);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-box {
+            background: var(--panel-bg);
+            border: 1px solid var(--primary);
+            border-radius: 16px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 0 30px var(--primary-glow);
+            text-align: center;
+        }
+        .login-box h2 {
+            justify-content: center;
+            border: none;
+            margin-bottom: 1.5rem;
+        }
     </style>
 </head>
 <body>
+
+    <!-- Login Overlay -->
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2><span class="logo-icon">☠</span> Acesso Restrito</h2>
+            <form id="login-form">
+                <div class="form-group" style="text-align: left;">
+                    <label>Usuário</label>
+                    <input type="text" id="login-user" required>
+                </div>
+                <div class="form-group" style="text-align: left;">
+                    <label>Senha</label>
+                    <input type="password" id="login-pass" required>
+                </div>
+                <button type="submit" class="btn" id="btn-login" style="margin-top: 1rem;">Autenticar</button>
+                <div id="login-error" style="color: var(--danger); margin-top: 1rem; font-size: 0.85rem;" class="hidden">Credenciais inválidas</div>
+            </form>
+        </div>
+    </div>
 
     <header>
         <div class="logo-container">
@@ -798,7 +843,14 @@
             tbody.innerHTML = '';
             
             if (findings.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-muted);">Nenhuma vulnerabilidade encontrada.</td></tr>';
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = 4;
+                td.style.textAlign = 'center';
+                td.style.color = 'var(--text-muted)';
+                td.textContent = 'Nenhuma vulnerabilidade encontrada.';
+                tr.appendChild(td);
+                tbody.appendChild(tr);
                 return;
             }
 
@@ -813,12 +865,34 @@
                 const typeOfFailure = finding.module || finding.title || 'Desconhecido';
                 const parameter = (finding.details && finding.details.parameter) || 'N/A';
 
-                tr.innerHTML = `
-                    <td><span class="badge ${severityLower}">${finding.severity}</span></td>
-                    <td><code style="font-family:'JetBrains Mono'; color:var(--accent-cyan)">${finding.endpoint}</code></td>
-                    <td>${typeOfFailure}</td>
-                    <td><code style="font-family:'JetBrains Mono'">${parameter}</code></td>
-                `;
+                // Safe DOM Element Creation (XSS Mitigation)
+                const tdSeverity = document.createElement('td');
+                const spanSeverity = document.createElement('span');
+                spanSeverity.className = `badge ${severityLower}`;
+                spanSeverity.textContent = finding.severity;
+                tdSeverity.appendChild(spanSeverity);
+
+                const tdEndpoint = document.createElement('td');
+                const codeEndpoint = document.createElement('code');
+                codeEndpoint.style.fontFamily = "'JetBrains Mono'";
+                codeEndpoint.style.color = "var(--accent-cyan)";
+                codeEndpoint.textContent = finding.endpoint;
+                tdEndpoint.appendChild(codeEndpoint);
+
+                const tdType = document.createElement('td');
+                tdType.textContent = typeOfFailure;
+
+                const tdParam = document.createElement('td');
+                const codeParam = document.createElement('code');
+                codeParam.style.fontFamily = "'JetBrains Mono'";
+                codeParam.textContent = parameter;
+                tdParam.appendChild(codeParam);
+
+                tr.appendChild(tdSeverity);
+                tr.appendChild(tdEndpoint);
+                tr.appendChild(tdType);
+                tr.appendChild(tdParam);
+
                 tr.addEventListener('click', () => showDetails(finding));
                 tbody.appendChild(tr);
             });
@@ -848,6 +922,48 @@
             }
         });
 
+        // Auth / Login Check
+        async function checkAuth() {
+            try {
+                const res = await fetch('/api/auth/me');
+                if (res.ok) {
+                    document.getElementById('login-overlay').classList.add('hidden');
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        checkAuth();
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const user = document.getElementById('login-user').value;
+            const pass = document.getElementById('login-pass').value;
+            const btn = document.getElementById('btn-login');
+            
+            btn.disabled = true;
+            btn.textContent = "Aguarde...";
+            document.getElementById('login-error').classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: user, password: pass})
+                });
+                if (res.ok) {
+                    document.getElementById('login-overlay').classList.add('hidden');
+                } else {
+                    document.getElementById('login-error').classList.remove('hidden');
+                }
+            } catch (err) {
+                document.getElementById('login-error').textContent = "Erro de conexão";
+                document.getElementById('login-error').classList.remove('hidden');
+            }
+            btn.disabled = false;
+            btn.textContent = "Autenticar";
+        });
+
         // Form Submit -> Trigger Scan
         document.getElementById('fuzz-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -857,7 +973,9 @@
             const terminal = document.getElementById('terminal-body');
             
             // Clean state
-            terminal.innerHTML = '';
+            while (terminal.firstChild) {
+                terminal.removeChild(terminal.firstChild);
+            }
             btn.disabled = true;
             statusIndicator.textContent = "Executando Varredura...";
             statusIndicator.style.background = 'rgba(245, 158, 11, 0.1)';
